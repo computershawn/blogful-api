@@ -1,4 +1,5 @@
 const { expect } = require('chai');
+const moment = require('moment');
 const knex = require('knex');
 const app = require('../src/app');
 const { makeArticlesArray } = require('./articles.fixtures');
@@ -79,7 +80,7 @@ describe.only('Articles Endpoints', () => {
   })
 
   describe(`POST /articles`, () => {
-    it(`creates an article, responding with 201 and the new article`, function() {
+    it(`creates an article, responding with 201 and the new article`, function () {
       this.retries(3);
       const newArticle = {
         title: 'Test new article',
@@ -97,8 +98,8 @@ describe.only('Articles Endpoints', () => {
           expect(res.body).to.have.property('id')
           expect(res.headers.location).to.eql(`/articles/${res.body.id}`)
           /* BROKEN TIMESTAMP COMPARISON */
-          const expected = new Date().toLocaleString();
-          const actual = new Date(res.body.date_published).toLocaleString();
+          const expected = moment(new Date().toLocaleString());
+          const actual = moment(new Date(res.body.date_published).toLocaleString());
           expect(actual).to.eql(expected)
           /* END: BROKEN TIMESTAMP COMPARISON */
         })
@@ -108,5 +109,23 @@ describe.only('Articles Endpoints', () => {
             .expect(postRes.body)
         )
     })
+       const requiredFields = ['title', 'style', 'content']
+    
+       requiredFields.forEach(field => {
+         const newArticle = {
+           title: 'Test new article',
+           style: 'Listicle',
+           content: 'Test new article content...'
+         }
+         it(`responds with 400 and an error message when the '${field}' is missing`, () => {
+           delete newArticle[field]
+           return supertest(app)
+             .post('/articles')
+             .send(newArticle)
+             .expect(400, {
+               error: { message: `Missing '${field}' in request body` }
+             })
+         })
+       })
   })
 })
