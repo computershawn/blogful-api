@@ -1,8 +1,21 @@
-const express = require('express')
-const ArticlesService = require('./articles-service')
+const express = require('express');
+const xss = require('xss');
+const ArticlesService = require('./articles-service');
 
 const articlesRouter = express.Router()
 const jsonParser = express.json()
+
+/* We sanitize article content a few times,
+   so let's wrap that process in a function
+ */
+const sanitizeArticle = (article) => ({
+  id: article.id,
+  style: article.style,
+  title: xss(article.title), // sanitize title
+  content: xss(article.content), // sanitize content
+  date_published: article.date_published
+});
+
 
 articlesRouter
   .route('/')
@@ -11,7 +24,8 @@ articlesRouter
       req.app.get('db')
     )
       .then(articles => {
-        res.json(articles)
+        let articlesCleaned = articles.map(article => sanitizeArticle(article));
+        res.json(articlesCleaned);
       })
       .catch(next)
   })
@@ -33,23 +47,39 @@ articlesRouter
         res
           .status(201)
           .location(`/articles/${article.id}`)
-          .json(article)
+          .json(sanitizeArticle(article))
       })
       .catch(next)
   })
 
 articlesRouter
   .route('/:article_id')
-  .get((req, res, next) => {
-    const knexInstance = req.app.get('db')
-    ArticlesService.getById(knexInstance, req.params.article_id)
+  .all((req, res, next) => {
+    ArticlesService.getById(
+      req.app.get('db'),
+      req.params.article_id
+    )
       .then(article => {
         if (!article) {
           return res.status(404).json({
             error: { message: `Article doesn't exist` }
           })
         }
-        res.json(article)
+        res.article = article // save the article for the next middleware
+        next() // don't forget to call next so the next middleware happens!
+      })
+      .catch(next)
+  })
+  .get((req, res, next) => {
+    res.json(sanitizeArticle(res.article))
+  })
+  .delete((req, res, next) => {
+    ArticlesService.deleteArticle(
+      req.app.get('db'),
+      req.params.article_id
+    )
+      .then(() => {
+        res.status(204).end()
       })
       .catch(next)
   })
